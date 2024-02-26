@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 import subprocess
 from typing import List
@@ -13,7 +14,7 @@ output_dir = "/home/heddxh/Workspace/Resources/yet_another_mkvtool/example/outpu
 SC = "sc"  # 简体中文
 TC = "tc"  # 繁体中文
 
-EXEC = []
+EXEC: List[str] = []
 
 
 def main():
@@ -21,15 +22,20 @@ def main():
         if filename.endswith(".mkv"):
             mkv_file = os.path.join(mkv_dir, filename)
             main_name, _ = os.path.splitext(filename)
-            subtitle_files = find_ass(main_name)
+            subtitle_files = find_sub(main_name)
             for sub in subtitle_files:
-                merge_ass(sub, mkv_file)
-            subset_fonts(font_dir)
-            merge_fonts(mkv_file)
+                merge_sub(sub, mkv_file)
+                subset_fonts(sub, font_dir)
+            with os.scandir(output_dir) as ot:
+                for entry in ot:
+                    if entry.is_dir() and entry.name.endswith("subsetted"):
+                        merge_fonts(entry.path)
+            print(f"将执行: {EXEC}")
+            subprocess.run(EXEC)
 
 
-# Find sub files according to base name. Return absolute path.
-def find_ass(main_name: str) -> List[str]:
+def find_sub(main_name: str) -> List[str]:
+    """查找字幕文件并返回绝对路径列表"""
     result = []
     for filename in os.listdir(sub_dir):
         if filename.startswith(main_name) and filename.endswith("ass"):
@@ -38,7 +44,8 @@ def find_ass(main_name: str) -> List[str]:
     return result
 
 
-def merge_ass(sub_path: str, mkv_path: str):
+def merge_sub(sub_path: str, mkv_path: str):
+    global EXEC
     base_name = os.path.basename(sub_path)
     _, lan = os.path.splitext(base_name)
     output_name, _ = os.path.splitext(os.path.basename(mkv_path))
@@ -52,50 +59,48 @@ def merge_ass(sub_path: str, mkv_path: str):
             language_code = "zh-Hant"
             track_name = "繁体中文"
     # 嵌入字幕
-    # subprocess.run(["mkvmerge", "-o", output_path, mkv_path, sub_path])
-    EXEC = ["mkvmerge", "-o", output_path, mkv_path, sub_path]
-    # 找到字幕轨道并更改语言标签
-    info_raw = subprocess.run(
-        ["mkvmerge", "-J", output_path], capture_output=True, text=True, check=True
-    )
-    tracks = json.loads(info_raw.stdout).get("tracks")
-    for t in tracks:
-        # 找到未指定语言标签的字幕轨道
-        if (
-            t.get("type") == "subtitles"
-            and t.get("properties").get("language") == "und"
-        ):
-            subprocess.run(
-                [
-                    "mkvpropedit",
-                    output_path,
-                    "--edit",
-                    f"track:={t.get('properties').get('uid')}",
-                    "--set",
-                    f"language={language_code}",
-                    "--set",
-                    f"name={track_name}",
-                ]
-            )
+    EXEC = EXEC + [
+        "mkvmerge",
+        "-o",
+        output_path,
+        mkv_path,
+        "--language",
+        f"0:{language_code}",
+        "--track-name",
+        f"0:{track_name}",
+        sub_path,
+    ]
 
 
-def subset_fonts(sub_path: str):
+def subset_fonts(sub_path: str, font_dir: str = font_dir):
     """子集化后的字体默认存储在{output_dit}/fonts"""
     subprocess.run(
         [
             "assfonts",
+            "-s",
             "-i",
             sub_path,
             "-f",
             font_dir,
             "-o",
-            os.path.join(output_dir, "fonts"),
+            os.path.join(output_dir),
         ]
     )
 
 
-def merge_fonts(mkv_path: str):
-    pass
+def merge_fonts(font_dir: str):
+    """嵌入字体"""
+    global EXEC
+    for filename in os.listdir(font_dir):
+        mime = mimetypes.guess_type(os.path.join(font_dir, filename))[0]
+        print(f"filename: {filename}, mime: {mime}")
+        if mime and mime.startswith("font"):
+            EXEC += [
+                "--attachment-mime-type",
+                mime,
+                "--attach-file",
+                os.path.join(font_dir, filename),
+            ]
 
 
 if __name__ == "__main__":
