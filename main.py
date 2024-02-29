@@ -47,7 +47,9 @@ def find_sub(main_name: str) -> List[str]:
 def merge_sub(sub_path: str, mkv_path: str):
     global exec
     base_name = os.path.basename(sub_path)
-    _, lan = os.path.splitext(base_name)
+    filename, _ = os.path.splitext(base_name)
+    _, lan = os.path.splitext(filename)
+    lan = lan[1:]
     output_name, _ = os.path.splitext(os.path.basename(mkv_path))
     output_path = os.path.join(output_dir, output_name) + ".mkv"
     # 判断简繁
