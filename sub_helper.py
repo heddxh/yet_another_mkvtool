@@ -14,22 +14,27 @@ output_dir = "/home/heddxh/Workspace/Resources/yet_another_mkvtool/example/outpu
 SC: str = "sc"  # 简体中文
 TC: str = "tc"  # 繁体中文
 
-exec: List[str] = []
-
 
 def main():
     for filename in os.listdir(mkv_dir):
+        exec: List[str] = []
         if filename.endswith(".mkv"):
             mkv_file = os.path.join(mkv_dir, filename)
             main_name, _ = os.path.splitext(filename)
             subtitle_files = find_sub(main_name)
+            output_path = os.path.join(output_dir, filename)
+            exec += [
+                "mkvmerge",
+                "-o",
+                output_path,
+            ]
             for sub in subtitle_files:
-                merge_sub(sub, mkv_file)
+                exec += merge_sub(sub, mkv_file)
                 subset_fonts(sub, font_dir)
             with os.scandir(output_dir) as ot:
                 for entry in ot:
                     if entry.is_dir() and entry.name.endswith("subsetted"):
-                        merge_fonts(entry.path)
+                        exec += merge_fonts(entry.path)
             print(f"将执行: {exec}")
             subprocess.run(exec)
 
@@ -44,8 +49,7 @@ def find_sub(main_name: str) -> List[str]:
     return result
 
 
-def merge_sub(sub_path: str, mkv_path: str):
-    global exec
+def merge_sub(sub_path: str, mkv_path: str) -> List[str]:
     base_name = os.path.basename(sub_path)
     filename, _ = os.path.splitext(base_name)
     _, lan = os.path.splitext(filename)
@@ -60,12 +64,10 @@ def merge_sub(sub_path: str, mkv_path: str):
         language_code = "zh-Hant"
         track_name = "繁体中文"
     else:
+        print(lan)
         raise
     # 嵌入字幕
-    exec = exec + [
-        "mkvmerge",
-        "-o",
-        output_path,
+    return [
         mkv_path,
         "--language",
         f"0:{language_code}",
@@ -91,19 +93,20 @@ def subset_fonts(sub_path: str, font_dir: str = font_dir):
     )
 
 
-def merge_fonts(font_dir: str):
+def merge_fonts(font_dir: str) -> List[str]:
     """嵌入字体"""
-    global exec
+    merge_fonts_exec: List[str] = []
     for filename in os.listdir(font_dir):
         mime = mimetypes.guess_type(os.path.join(font_dir, filename))[0]
         print(f"filename: {filename}, mime: {mime}")
         if mime and mime.startswith("font"):
-            exec += [
+            merge_fonts_exec += [
                 "--attachment-mime-type",
                 mime,
                 "--attach-file",
                 os.path.join(font_dir, filename),
             ]
+    return merge_fonts_exec
 
 
 if __name__ == "__main__":
